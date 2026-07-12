@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tank Cascade Simulator — Nethara Bashudi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --deep:#14130F; --panel:#1E1C17; --panel-2:#241F18;
+    --line:rgba(201,168,118,0.22); --line-strong:rgba(201,168,118,0.4);
+    --sandstone:#C9A876; --gold:#D4A24C; --teal:#3F7268; --teal-light:#6FA89A;
+    --parchment:#EDE3CF; --muted:#A79C87;
+    --serif:'Cinzel', serif; --sans:'Inter', sans-serif; --mono:'IBM Plex Mono', monospace;
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; }
+  body{
+    background:
+      radial-gradient(ellipse at 15% -10%, rgba(212,162,76,0.06), transparent 45%),
+      radial-gradient(ellipse at 100% 10%, rgba(63,114,104,0.08), transparent 40%),
+      var(--deep);
+    color:var(--parchment); font-family:var(--sans); min-height:100vh;
+  }
+  header{
+    padding:26px 5vw 18px; border-bottom:1px solid var(--line);
+    display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:16px;
+  }
+  .title-block h1{ font-family:var(--serif); font-weight:600; font-size:clamp(1.5rem,3vw,2.1rem); color:var(--parchment); }
+  .title-block h1 span{ color:var(--gold); }
+  .title-block .sub{ font-family:var(--mono); font-size:0.72rem; color:var(--teal-light); letter-spacing:0.1em; text-transform:uppercase; margin-top:6px; }
+  a.back{ font-family:var(--mono); font-size:0.72rem; color:var(--sandstone); letter-spacing:0.08em; text-decoration:none; opacity:0.8; }
+  a.back:hover{ color:var(--gold); opacity:1; }
+
+  main{ padding:28px 5vw 60px; display:grid; grid-template-columns: 1fr 300px; gap:28px; }
+  @media (max-width:900px){ main{ grid-template-columns:1fr; } }
+
+  .stage{ border:1px solid var(--line-strong); background:var(--panel); position:relative; border-radius:2px; overflow:hidden; }
+  #cascadeCanvas{ display:block; width:100%; height:560px; touch-action:none; cursor:crosshair; }
+
+  .stage-footer{
+    display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;
+    padding:12px 18px; border-top:1px solid var(--line); font-family:var(--mono); font-size:0.7rem; color:var(--muted);
+  }
+  .toast{
+    position:absolute; top:16px; left:50%; transform:translateX(-50%);
+    background:rgba(20,19,15,0.92); border:1px solid var(--gold); color:var(--gold);
+    font-family:var(--mono); font-size:0.75rem; padding:8px 16px; border-radius:2px;
+    opacity:0; pointer-events:none; transition:opacity 0.25s ease; letter-spacing:0.03em; z-index:5;
+  }
+  .toast.show{ opacity:1; }
+
+  .panel{ display:flex; flex-direction:column; gap:18px; }
+  .card{ border:1px solid var(--line); background:var(--panel); padding:20px 20px 22px; }
+  .card h2{ font-family:var(--serif); font-size:1.02rem; color:var(--gold); margin-bottom:12px; }
+  .card p{ font-size:0.85rem; opacity:0.85; margin-bottom:10px; }
+  .card p:last-child{ margin-bottom:0; }
+
+  .controls{ display:flex; flex-direction:column; gap:10px; }
+  .btn{
+    font-family:var(--mono); font-size:0.76rem; letter-spacing:0.04em;
+    padding:12px 16px; border-radius:2px; text-align:center; cursor:pointer;
+    border:1px solid var(--line-strong); background:transparent; color:var(--parchment);
+    transition:all 0.2s ease; display:flex; align-items:center; justify-content:center; gap:8px;
+  }
+  .btn:hover{ border-color:var(--gold); color:var(--gold); }
+  .btn.active{ background:var(--teal); border-color:var(--teal-light); color:var(--parchment); }
+  .btn.primary{ background:var(--gold); color:var(--deep); border-color:var(--gold); font-weight:600; }
+  .btn.primary:hover{ color:var(--deep); opacity:0.9; }
+  .btn:disabled{ opacity:0.35; cursor:not-allowed; }
+
+  .stat-row{ display:flex; justify-content:space-between; font-family:var(--mono); font-size:0.78rem; padding:8px 0; border-bottom:1px dashed var(--line); }
+  .stat-row:last-child{ border-bottom:none; }
+  .stat-row .k{ color:var(--teal-light); }
+
+  .legend{ display:flex; flex-direction:column; gap:10px; font-family:var(--mono); font-size:0.72rem; }
+  .legend-item{ display:flex; align-items:center; gap:10px; opacity:0.85; }
+  .swatch{ width:14px; height:14px; border-radius:50%; flex-shrink:0; }
+
+  #readingsCard{ display:none; }
+  #readingsCard.show{ display:block; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title-block">
+    <h1>Tank Cascade <span>Simulator</span></h1>
+    <div class="sub">Ele. 048 — The Cascade / Interactive Model</div>
+  </div>
+  <a class="back" href="#" onclick="return false;">← Back to Portfolio</a>
+</header>
+
+<main>
+  <div class="stage">
+    <canvas id="cascadeCanvas"></canvas>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <div class="stage-footer">
+      <span>Drag empty space to build · drag a tank to move it · click two tanks to connect · click a valve to close a channel · scroll to resize selected</span>
+      <span id="statLine">Tanks: 0 · Channels: 0</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="card">
+      <h2>Controls</h2>
+      <div class="controls">
+        <button class="btn primary" id="rainBtn">☔ Start Rain</button>
+        <button class="btn" id="deleteBtn" disabled>Delete Selected Tank</button>
+        <button class="btn" id="resetBtn">Reset Cascade</button>
+      </div>
+    </div>
+
+    <div class="card" id="readingsCard">
+      <h2>Live Reading — Selected Tank</h2>
+      <div class="stat-row"><span class="k">Capacity</span><span id="rCapacity">–</span></div>
+      <div class="stat-row"><span class="k">Volume</span><span id="rVolume">–</span></div>
+      <div class="stat-row"><span class="k">Fill</span><span id="rFill">–</span></div>
+      <div class="stat-row"><span class="k">Inflow</span><span id="rIn">–</span></div>
+      <div class="stat-row"><span class="k">Outflow</span><span id="rOut">–</span></div>
+    </div>
+
+    <div class="card">
+      <h2>System</h2>
+      <div class="stat-row"><span class="k">Tanks</span><span id="tankCount">0</span></div>
+      <div class="stat-row"><span class="k">Channels</span><span id="connCount">0</span></div>
+      <div class="stat-row"><span class="k">Total stored</span><span id="totalStored">0%</span></div>
+      <div class="stat-row"><span class="k">Rain</span><span id="rainState">Off</span></div>
+    </div>
+
+    <div class="card">
+      <h2>How it works</h2>
+      <p>Every reservoir fills from rain at the top of the system. When you connect two tanks, water flows
+      downhill automatically — but the rate is capped, the same way a <strong style="color:var(--gold)">bisokotuwa</strong>
+      regulated outflow in ancient Sri Lankan reservoirs so pressure never spiked enough to burst the embankment.</p>
+      <p>Flow rate = maxOutflow × √(fill) — fuller tanks push harder, but never past the channel's limit.
+      A full tank with no outlet simply spills, like a real spillway.</p>
+    </div>
+
+    <div class="card">
+      <h2>Legend</h2>
+      <div class="legend">
+        <div class="legend-item"><span class="swatch" style="background:var(--teal-light);"></span> Water level (fill %)</div>
+        <div class="legend-item"><span class="swatch" style="background:var(--gold); border-radius:2px;"></span> Selected reservoir</div>
+        <div class="legend-item"><span class="swatch" style="background:var(--teal-light); box-shadow:0 0 4px var(--teal-light);"></span> Particles = active flow</div>
+        <div class="legend-item"><span class="swatch" style="background:transparent; border:1px solid var(--gold); border-radius:2px;"></span> Ring pulse = at capacity</div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+(function(){
+  const canvas = document.getElementById('cascadeCanvas');
+  const ctx = canvas.getContext('2d');
+  const toastEl = document.getElementById('toast');
+  const rainBtn = document.getElementById('rainBtn');
+  const deleteBtn = document.getElementById('deleteBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const tankCountEl = document.getElementById('tankCount');
+  const connCountEl = document.getElementById('connCount');
+  const totalStoredEl = document.getElementById('totalStored');
+  const rainStateEl = document.getElementById('rainState');
+  const statLine = document.getElementById('statLine');
+  const readingsCard = document.getElementById('readingsCard');
+  const rCapacity = document.getElementById('rCapacity');
+  const rVolume = document.getElementById('rVolume');
+  const rFill = document.getElementById('rFill');
+  const rIn = document.getElementById('rIn');
+  const rOut = document.getElementById('rOut');
+
+  let dpr = Math.min(window.devicePixelRatio || 1, 2);
+  let W = 0, H = 0;
+  let tanks = [];
+  let connections = [];
+  let nextId = 1;
+  let selectedTankId = null;
+  let rainOn = false;
+  let drawing = null;       // new-tank drag: {x0,y0,x1,y1}
+  let moving = null;        // move-tank drag: {id, startX, startY, tankX0, tankY0, moved}
+  let lastTime = performance.now();
+  let toastTimer = null;
+  let globalPhase = 0;
+
+  function resize(){
+    const rect = canvas.parentElement.getBoundingClientRect();
+    W = rect.width; H = 560;
+    canvas.style.height = H + 'px';
+    canvas.width = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function showToast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(()=>toastEl.classList.remove('show'), 1600);
+  }
+
+  function tankAt(x,y){
+    for(let i=tanks.length-1;i>=0;i--){
+      const t = tanks[i];
+      if(Math.hypot(t.x-x, t.y-y) <= t.r + 6) return t;
+    }
+    return null;
+  }
+
+  function getConnEndpoints(c){
+    const from = tanks.find(t=>t.id===c.from);
+    const to = tanks.find(t=>t.id===c.to);
+    if(!from || !to) return null;
+    const ang = Math.atan2(to.y-from.y, to.x-from.x);
+    return {
+      x1: from.x + Math.cos(ang)*from.r, y1: from.y + Math.sin(ang)*from.r,
+      x2: to.x - Math.cos(ang)*to.r,     y2: to.y - Math.sin(ang)*to.r,
+      ang, from, to
+    };
+  }
+
+  function distToSegment(px,py,x1,y1,x2,y2){
+    const dx=x2-x1, dy=y2-y1;
+    const lenSq = dx*dx+dy*dy;
+    let t = lenSq===0 ? 0 : ((px-x1)*dx+(py-y1)*dy)/lenSq;
+    t = Math.max(0, Math.min(1,t));
+    return Math.hypot(px-(x1+t*dx), py-(y1+t*dy));
+  }
+
+  function connectionAt(x,y){
+    for(let i=connections.length-1;i>=0;i--){
+      const ep = getConnEndpoints(connections[i]);
+      if(!ep) continue;
+      if(distToSegment(x,y,ep.x1,ep.y1,ep.x2,ep.y2) <= 10) return connections[i];
+    }
+    return null;
+  }
+
+  function hasIncoming(id){ return connections.some(c=>c.to===id); }
+  function connectionExists(a,b){ return connections.some(c=> (c.from===a&&c.to===b) || (c.from===b&&c.to===a)); }
+
+  function createsCycle(fromId, toId){
+    const stack=[toId]; const seen=new Set();
+    while(stack.length){
+      const cur = stack.pop();
+      if(cur===fromId) return true;
+      if(seen.has(cur)) continue;
+      seen.add(cur);
+      connections.filter(c=>c.from===cur).forEach(c=>stack.push(c.to));
+    }
+    return false;
+  }
+
+  function overlapsExisting(x,y,r){
+    return tanks.some(t => Math.hypot(t.x-x,t.y-y) < (t.r + r + 8));
+  }
+
+  function addTank(x,y,r){
+    r = Math.max(20, Math.min(85, r));
+    if(overlapsExisting(x,y,r)){ showToast('Too close to another reservoir'); return; }
+    const margin = r+4;
+    x = Math.max(margin, Math.min(W-margin, x));
+    y = Math.max(margin, Math.min(H-margin, y));
+    const capacity = Math.PI * r * r * 0.6;
+    tanks.push({ id: nextId++, x, y, r, capacity, volume: 0, maxOutflow: r*1.4, pulse: 0 });
+    updateStats();
+  }
+
+  function setSelected(id){
+    selectedTankId = id;
+    deleteBtn.disabled = selectedTankId===null;
+    readingsCard.classList.toggle('show', selectedTankId!==null);
+  }
+
+  function deleteTank(id){
+    tanks = tanks.filter(t=>t.id!==id);
+    connections = connections.filter(c=>c.from!==id && c.to!==id);
+    if(selectedTankId===id) setSelected(null);
+    updateStats();
+  }
+
+  function updateStats(){
+    tankCountEl.textContent = tanks.length;
+    connCountEl.textContent = connections.length;
+    statLine.textContent = `Tanks: ${tanks.length} · Channels: ${connections.length}`;
+    let total=0, cap=0;
+    tanks.forEach(t=>{ total+=t.volume; cap+=t.capacity; });
+    totalStoredEl.textContent = cap>0 ? Math.round(100*total/cap)+'%' : '0%';
+    rainStateEl.textContent = rainOn ? 'On' : 'Off';
+
+    if(selectedTankId!==null){
+      const t = tanks.find(tk=>tk.id===selectedTankId);
+      if(t){
+        const inflow = connections.filter(c=>c.to===t.id).reduce((s,c)=>s+(c.flowRate||0),0);
+        const outflow = connections.filter(c=>c.from===t.id).reduce((s,c)=>s+(c.flowRate||0),0);
+        rCapacity.textContent = Math.round(t.capacity);
+        rVolume.textContent = Math.round(t.volume);
+        rFill.textContent = Math.round(100*t.volume/t.capacity)+'%';
+        rIn.textContent = inflow.toFixed(1)+'/s';
+        rOut.textContent = outflow.toFixed(1)+'/s';
+      }
+    }
+  }
+
+  // ---------- pointer interaction ----------
+  function getPos(e){
+    const rect = canvas.getBoundingClientRect();
+    const cx = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+    const cy = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+    return {x:cx, y:cy};
+  }
+
+  canvas.addEventListener('pointerdown', (e)=>{
+    const p = getPos(e);
+    const hit = tankAt(p.x,p.y);
+
+    if(hit){
+      moving = { id:hit.id, startX:p.x, startY:p.y, tankX0:hit.x, tankY0:hit.y, moved:false };
+      return;
+    }
+
+    const conn = connectionAt(p.x,p.y);
+    if(conn){
+      connections = connections.filter(c=>c!==conn);
+      showToast('Channel closed');
+      updateStats();
+      return;
+    }
+
+    drawing = { x0:p.x, y0:p.y, x1:p.x, y1:p.y };
+    setSelected(null);
+  });
+
+  canvas.addEventListener('pointermove', (e)=>{
+    const p = getPos(e);
+    if(moving){
+      const dx = p.x-moving.startX, dy = p.y-moving.startY;
+      if(!moving.moved && Math.hypot(dx,dy) > 6) moving.moved = true;
+      if(moving.moved){
+        const t = tanks.find(tk=>tk.id===moving.id);
+        if(t){
+          const margin = t.r+4;
+          t.x = Math.max(margin, Math.min(W-margin, moving.tankX0+dx));
+          t.y = Math.max(margin, Math.min(H-margin, moving.tankY0+dy));
+        }
+      }
+      return;
+    }
+    if(drawing){ drawing.x1 = p.x; drawing.y1 = p.y; }
+  });
+
+  window.addEventListener('pointerup', ()=>{
+    if(moving){
+      if(!moving.moved){
+        // treat as a tap: select / connect
+        const id = moving.id;
+        if(selectedTankId===null){
+          setSelected(id);
+        } else if(selectedTankId===id){
+          setSelected(null);
+        } else {
+          const from = tanks.find(t=>t.id===selectedTankId);
+          const to = tanks.find(t=>t.id===id);
+          if(to.y <= from.y + 10){
+            showToast('Channels can only flow downhill');
+          } else if(connectionExists(from.id,to.id)){
+            showToast('Already connected');
+          } else if(createsCycle(from.id,to.id)){
+            showToast('That would create a loop');
+          } else {
+            connections.push({from:from.id, to:to.id, flowRate:0, phase:0});
+            showToast('Channel opened');
+          }
+          setSelected(null);
+        }
+      }
+      moving = null;
+      updateStats();
+      return;
+    }
+    if(drawing){
+      const r = Math.hypot(drawing.x1-drawing.x0, drawing.y1-drawing.y0);
+      if(r > 12) addTank(drawing.x0, drawing.y0, r);
+      drawing = null;
+    }
+  });
+
+  canvas.addEventListener('wheel', (e)=>{
+    if(selectedTankId===null) return;
+    e.preventDefault();
+    const t = tanks.find(tk=>tk.id===selectedTankId);
+    if(!t) return;
+    const fillFrac = t.volume / t.capacity;
+    t.r = Math.max(20, Math.min(85, t.r - Math.sign(e.deltaY)*3));
+    t.capacity = Math.PI * t.r * t.r * 0.6;
+    t.maxOutflow = t.r * 1.4;
+    t.volume = fillFrac * t.capacity;
+  }, {passive:false});
+
+  deleteBtn.addEventListener('click', ()=>{ if(selectedTankId!==null) deleteTank(selectedTankId); });
+
+  rainBtn.addEventListener('click', ()=>{
+    rainOn = !rainOn;
+    rainBtn.textContent = rainOn ? '☔ Stop Rain' : '☔ Start Rain';
+    rainBtn.classList.toggle('active', rainOn);
+    updateStats();
+  });
+
+  resetBtn.addEventListener('click', ()=>{
+    tanks=[]; connections=[]; rainOn=false;
+    setSelected(null);
+    rainBtn.textContent='☔ Start Rain'; rainBtn.classList.remove('active');
+    updateStats();
+    seedDefault();
+  });
+
+  // ---------- simulation ----------
+  function step(dt){
+    if(rainOn){
+      tanks.forEach(t=>{
+        if(!hasIncoming(t.id)){
+          t.volume = Math.min(t.capacity, t.volume + 34*dt);
+          if(t.volume >= t.capacity*0.999) t.pulse = Math.min(1, t.pulse+dt*3);
+        }
+      });
+    }
+    connections.forEach(c=>{
+      const from = tanks.find(t=>t.id===c.from);
+      const to = tanks.find(t=>t.id===c.to);
+      if(!from || !to){ c.flowRate=0; return; }
+      const fill = from.volume / from.capacity;
+      const desired = from.maxOutflow * Math.sqrt(Math.max(0,fill));
+      const space = to.capacity - to.volume;
+      const transfer = Math.max(0, Math.min(desired*dt, from.volume, Math.max(0,space)));
+      from.volume -= transfer;
+      to.volume += transfer;
+      c.flowRate = dt>0 ? transfer/dt : 0;
+      c.phase = (c.phase||0) + c.flowRate*dt*0.045;
+    });
+    tanks.forEach(t=>{ if(t.pulse>0 && !(rainOn && t.volume>=t.capacity*0.999 && !hasIncoming(t.id))) t.pulse = Math.max(0, t.pulse-dt*1.2); });
+    globalPhase += dt;
+  }
+
+  // ---------- rendering ----------
+  function drawGrid(){
+    ctx.save();
+    ctx.strokeStyle = 'rgba(201,168,118,0.06)';
+    ctx.lineWidth = 1;
+    const step=32;
+    for(let x=0;x<W;x+=step){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+    for(let y=0;y<H;y+=step){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+    ctx.restore();
+  }
+
+  function drawEmptyHint(){
+    if(tanks.length>0 || drawing) return;
+    ctx.save();
+    ctx.fillStyle = 'rgba(201,168,118,0.55)';
+    ctx.font = '13px "IBM Plex Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('drag anywhere to build your first reservoir', W/2, H/2);
+    const pulse = 0.5+0.5*Math.sin(globalPhase*2);
+    ctx.strokeStyle = `rgba(212,162,76,${0.25+0.25*pulse})`;
+    ctx.setLineDash([4,6]);
+    ctx.beginPath(); ctx.arc(W/2, H/2-40, 36+4*pulse, 0, Math.PI*2); ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawConnection(c){
+    const ep = getConnEndpoints(c);
+    if(!ep) return;
+    const {x1,y1,x2,y2,ang} = ep;
+
+    ctx.save();
+    ctx.strokeStyle = 'rgba(201,168,118,0.5)';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    ctx.restore();
+
+    if(c.flowRate > 0.5){
+      const len = Math.hypot(x2-x1,y2-y1);
+      const N = Math.max(2, Math.min(8, Math.round(len/26)));
+      for(let i=0;i<N;i++){
+        const t = ((c.phase||0) + i/N) % 1;
+        const px = x1+(x2-x1)*t, py = y1+(y2-y1)*t;
+        ctx.save();
+        ctx.fillStyle = 'rgba(111,168,154,0.95)';
+        ctx.shadowColor = 'rgba(111,168,154,0.8)';
+        ctx.shadowBlur = 4;
+        ctx.beginPath(); ctx.arc(px,py,2.4,0,Math.PI*2); ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    const mx=(x1+x2)/2, my=(y1+y2)/2;
+    ctx.save();
+    ctx.translate(mx,my); ctx.rotate(ang);
+    ctx.strokeStyle = c.flowRate>0.5 ? '#D4A24C' : 'rgba(201,168,118,0.55)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(-6,-6,12,12);
+    ctx.restore();
+  }
+
+  function drawTank(t){
+    const fill = Math.max(0, Math.min(1, t.volume/t.capacity));
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(t.x,t.y,t.r,0,Math.PI*2);
+    ctx.clip();
+    const waterTop = t.y + t.r - (2*t.r*fill);
+    const grad = ctx.createLinearGradient(0, t.y-t.r, 0, t.y+t.r);
+    grad.addColorStop(0, 'rgba(111,168,154,0.9)');
+    grad.addColorStop(1, 'rgba(63,114,104,0.95)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(t.x-t.r, waterTop, t.r*2, t.r*2);
+    ctx.restore();
+
+    if(t.pulse>0){
+      ctx.save();
+      ctx.strokeStyle = `rgba(212,162,76,${0.5*t.pulse})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, t.r + 6 + 10*(1-t.pulse), 0, Math.PI*2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(t.x,t.y,t.r,0,Math.PI*2);
+    ctx.lineWidth = t.id===selectedTankId ? 3 : 1.6;
+    ctx.strokeStyle = t.id===selectedTankId ? '#D4A24C' : 'rgba(201,168,118,0.7)';
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(237,227,207,0.9)';
+    ctx.font = '11px "IBM Plex Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(Math.round(fill*100)+'%', t.x, t.y+4);
+    ctx.restore();
+  }
+
+  function drawPreview(){
+    if(!drawing) return;
+    const r = Math.hypot(drawing.x1-drawing.x0, drawing.y1-drawing.y0);
+    ctx.save();
+    ctx.setLineDash([5,5]);
+    ctx.strokeStyle = 'rgba(212,162,76,0.7)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(drawing.x0, drawing.y0, r, 0, Math.PI*2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function render(){
+    ctx.clearRect(0,0,W,H);
+    drawGrid();
+    drawEmptyHint();
+    connections.forEach(drawConnection);
+    tanks.forEach(drawTank);
+    drawPreview();
+  }
+
+  function loop(now){
+    const dt = Math.min(0.05, (now-lastTime)/1000);
+    lastTime = now;
+    step(dt);
+    render();
+    updateStats();
+    requestAnimationFrame(loop);
+  }
+
+  function seedDefault(){
+    addTank(W*0.5, 90, 46);
+    addTank(W*0.28, 250, 38);
+    addTank(W*0.72, 250, 38);
+    addTank(W*0.5, 420, 52);
+    if(tanks.length===4){
+      connections.push({from:tanks[0].id, to:tanks[1].id, flowRate:0, phase:0});
+      connections.push({from:tanks[0].id, to:tanks[2].id, flowRate:0, phase:0});
+      connections.push({from:tanks[1].id, to:tanks[3].id, flowRate:0, phase:0});
+      connections.push({from:tanks[2].id, to:tanks[3].id, flowRate:0, phase:0});
+    }
+    showToast('A starter cascade — try Start Rain');
+  }
+
+  seedDefault();
+  requestAnimationFrame(loop);
+})();
+</script>
+
+</body>
+</html>
